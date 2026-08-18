@@ -43,12 +43,21 @@ try:
                 continue
             lines = [line.strip() for line in text.split('\n') if line.strip()]
             
-            if len(lines) >= 2:
-                brand = lines[0]
-                price = next((line for line in lines if '원' in line or ',' in line), "가격 정보 없음")
-                title = next((line for line in lines if line != brand and line != price and len(line) > 2), "상품명 없음")
+            # 순위 숫자, 뱃지, 마케팅 문구 등 불필요한 텍스트 필터링
+            filtered_lines = []
+            for line in lines:
+                if line.isdigit() and int(line) <= 100:  # 순위 숫자 제외
+                    continue
+                if line in ["급상승", "단독", "품절임박"] or "판매" in line or "%" in line:
+                    continue
+                filtered_lines.append(line)
+            
+            if len(filtered_lines) >= 2:
+                brand = filtered_lines[0]
+                price = next((line for line in filtered_lines if '원' in line or ',' in line), "가격 정보 없음")
+                title = next((line for line in filtered_lines if line != brand and line != price and len(line) > 1), "상품명 없음")
                 
-                if title not in seen_titles and title != "상품명 없음":
+                if title not in seen_titles and title != "상품명 없음" and "원" not in title:
                     seen_titles.add(title)
                     products.append({
                         "Rank": len(products) + 1,
