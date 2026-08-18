@@ -23,31 +23,30 @@ wait = WebDriverWait(driver, 15)
 
 try:
     print("무신사 랭킹 페이지 접속 중...")
-    # 명확하게 NEW 랭킹 주소 지정
     driver.get("https://www.musinsa.com/main/musinsa/ranking?goodsKinds=NEW")
     time.sleep(5)
 
-    # 100개 상품을 모두 로드하기 위해 스크롤을 충분히 여러 번 내립니다.
-    last_height = driver.execute_script("return document.body.scrollHeight")
-    for _ in range(6):
+    # 스크롤을 여러 번 내려서 100위까지의 상품을 모두 렌더링시킵니다.
+    for _ in range(5):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(2)
 
-    # 개별 상품 리스트의 최상위 카드 박스들을 안정적으로 수집
-    items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sc-1v37d32-0, li.li_box, div[class*='goodsItem']")))
+    # 상품 링크(a태그)를 기준으로 카드 영역을 잡는 방식으로 변경하여 에러 방지
+    product_links = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a[href*='/products/']")))
     
     products = []
     seen_titles = set()
     
-    for item in items:
+    for link in product_links:
         try:
-            text = item.text.strip()
+            # 링크의 부모 요소를 카드 박스로 지정
+            card = link.find_element(By.XPATH, "./..")
+            text = card.text.strip()
             if not text:
                 continue
                 
             lines = [line.strip() for line in text.split('\n') if line.strip()]
             
-            # 불필요한 메타 텍스트 제외
             valid_lines = [l for l in lines if l not in ["급상승", "단독", "품절임박"] and not (l.isdigit() and int(l) <= 100)]
             
             if len(valid_lines) >= 2:
