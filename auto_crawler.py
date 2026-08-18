@@ -8,11 +8,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 options = Options()
-# ★ 핵심: 화면 없는 서버 환경에서 돌리기 위한 필수 옵션들
+# GitHub Actions 서버 환경 최적화 옵션
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--disable-gpu")
+options.add_argument("--window-size=1920,1080")  # 서버 환경에서 요소 누락을 방지하는 필수 화면 크기 설정
 options.add_argument("--disable-blink-features=AutomationControlled")
 options.add_experimental_option("excludeSwitches", ["enable-automation"])
 options.add_experimental_option('useAutomationExtension', False)
@@ -22,22 +23,10 @@ driver = webdriver.Chrome(options=options)
 wait = WebDriverWait(driver, 10)
 
 try:
-    print("무신사 NEW 랭킹 페이지 접속 중 (Headless 모드)...")
-    driver.get("https://www.musinsa.com/")
-    time.sleep(3)
-
-    # 랭킹 메뉴 강제 이동
-    ranking_menu = wait.until(EC.presence_of_element_located((By.XPATH, "//a[contains(text(), '랭킹') or contains(@href, 'ranking')]")))
-    driver.execute_script("arguments[0].click();", ranking_menu)
-    time.sleep(3)
-
-    try:
-        new_tab = wait.until(EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'NEW')] | //a[contains(text(), 'NEW')]")))
-        driver.execute_script("arguments[0].click();", new_tab)
-        time.sleep(3)
-    except Exception:
-        driver.get("https://www.musinsa.com/main/musinsa/ranking")
-        time.sleep(3)
+    print("무신사 랭킹 페이지 직접 접속 중 (Headless 모드)...")
+    # 메인 페이지를 거치지 않고 곧바로 NEW 랭킹 URL로 접속하여 타임아웃 방지
+    driver.get("https://www.musinsa.com/main/musinsa/ranking?goodsKinds=NEW")
+    time.sleep(4)
 
     driver.execute_script("window.scrollTo(0, 2000);")
     time.sleep(3)
