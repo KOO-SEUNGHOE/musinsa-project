@@ -26,12 +26,12 @@ try:
     driver.get("https://www.musinsa.com/main/musinsa/ranking?goodsKinds=NEW")
     time.sleep(5)
 
-    # 스크롤을 여러 번 내려서 100위까지의 상품을 모두 렌더링시킵니다.
-    for _ in range(5):
+    # 100개 상품이 모두 로드되도록 스크롤을 충분히 내립니다.
+    for _ in range(6):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(2)
 
-    # 상품 링크(a태그)를 기준으로 카드 영역을 잡는 방식으로 변경하여 에러 방지
+    # 상품 카드 영역을 정확히 타겟팅
     product_links = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a[href*='/products/']")))
     
     products = []
@@ -39,7 +39,6 @@ try:
     
     for link in product_links:
         try:
-            # 링크의 부모 요소를 카드 박스로 지정
             card = link.find_element(By.XPATH, "./..")
             text = card.text.strip()
             if not text:
@@ -47,6 +46,7 @@ try:
                 
             lines = [line.strip() for line in text.split('\n') if line.strip()]
             
+            # 불필요한 메타 텍스트 제거 및 유효 라인 추출
             valid_lines = [l for l in lines if l not in ["급상승", "단독", "품절임박"] and not (l.isdigit() and int(l) <= 100)]
             
             if len(valid_lines) >= 2:
