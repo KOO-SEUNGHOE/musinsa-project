@@ -2,11 +2,9 @@ name: Musinsa Daily Crawler
 
 on:
   schedule:
-    # 매일 한국 시간 기준 아침 8시 (UTC 기준 밤 11시)에 자동 실행
     - cron: '0 23 * * *'
-  workflow_dispatch: # 수동으로도 언제든 실행 버튼을 누를 수 있게 허용
+  workflow_dispatch:
 
-# ⭐️ 이 부분을 jobs 바로 위에 추가해 주세요!
 permissions:
   contents: write
 
@@ -14,8 +12,11 @@ jobs:
   run-crawler:
     runs-on: ubuntu-latest
     steps:
+      # ⭐️ 이 부분(token 추가)으로 바꿔주세요!
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,7 +29,7 @@ jobs:
           pip install selenium pandas
 
       - name: Run crawler script
-        run: python crawler.py  # 위에서 만든 크롤링 파일명
+        run: python crawler.py
 
       - name: Commit and push changes if data updated
         run: |
