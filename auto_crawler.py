@@ -26,10 +26,10 @@ try:
     print("무신사 랭킹 페이지 직접 접속 중 (Headless 모드)...")
     # 메인 페이지를 거치지 않고 곧바로 NEW 랭킹 URL로 접속하여 타임아웃 방지
     driver.get("https://www.musinsa.com/main/musinsa/ranking?goodsKinds=NEW")
-    time.sleep(4)
+    time.sleep(6)
 
     driver.execute_script("window.scrollTo(0, 2000);")
-    time.sleep(3)
+    time.sleep(5)
 
     product_links = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a[href*='/products/']")))
     items = [link.find_element(By.XPATH, "./..") for link in product_links]
