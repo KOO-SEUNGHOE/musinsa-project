@@ -6,6 +6,10 @@ on:
     - cron: '0 23 * * *'
   workflow_dispatch: # 수동으로도 언제든 실행 버튼을 누를 수 있게 허용
 
+# ⭐️ 이 부분을 jobs 바로 위에 추가해 주세요!
+permissions:
+  contents: write
+
 jobs:
   run-crawler:
     runs-on: ubuntu-latest
