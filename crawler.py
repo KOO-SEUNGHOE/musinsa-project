@@ -25,55 +25,50 @@ try:
     driver.get("https://www.musinsa.com/main/musinsa/ranking?gf=A&storeCode=musinsa&sectionId=199&contentsId=&categoryCode=000&ageBand=AGE_BAND_ALL&subPan=product")
     time.sleep(5)
 
-    # 100위까지 상품이 DOM에 완전히 로드되도록 스크롤을 여유 있게 반복 실행
+    # 100개 상품이 모두 로드되도록 스크롤을 충분히 내립니다.
     for _ in range(8):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2.5)
+        time.sleep(2)
 
-    # 상품 카드를 담고 있는 가장 핵심적인 컨테이너들을 탐색
-    # 무신사 랭킹 리스트의 개별 아이템 요소를 직접 타겟팅합니다.
-    items = driver.find_elements(By.CSS_SELECTOR, "div.sc-1v37d32-0, li.li_box, div.piece-common, article")
+    # 상품 카드 내부에 상품 상세 링크가 포함된 모든 요소를 직접 수집합니다.
+    # 부모 요소를 찾지 않고 링크 자체를 카드 단위로 활용하여 에러를 원천 차단합니다.
+    product_links = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a[href*='/products/']")))
     
-    # 만약 위 셀렉터로 안 잡히면 상품 이미지나 링크를 품고 있는 부모 li/div를 정밀 타겟팅
-    if len(items) < 10:
-        links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/products/']")
-        items = [link.find_element(By.XPATH, "./ancestor::div[contains(@class, 'goods')] | ./ancestor::li") for link in links]
-
     products = []
     seen_titles = set()
     
-    for idx, item in enumerate(items, 1):
+    for link in product_links:
         try:
-            text = item.text.strip()
+            # 링크가 포함된 가장 가까운 상위 박스 영역의 텍스트를 추출
+            card = link.find_element(By.XPATH, "./ancestor::li | ./ancestor::div[contains(@class, 'item')] | ./..")
+            text = card.text.strip()
             if not text:
                 continue
                 
             lines = [l.strip() for l in text.split('\n') if l.strip()]
             
-            # 불필요한 태그/텍스트 필터링
+            # 불필요한 메타 텍스트 및 랭킹 숫자 필터링
             filtered = []
             for l in lines:
-                if l in ["급상승", "단독", "품절임박", "쿠폰"] or "%" in l or "명이 보는 중" in l or "도착보장" in l:
+                if l in ["급상승", "단독", "품절임박", "쿠폰"] or "%" in l or "명이 보는 중" in l or "도착보장" in l or "판매" in l:
                     continue
-                if l.isdigit() and 1 <= int(l) <= 100:  # 순위 숫자 자체는 제외
+                if l.isdigit() and 1 <= int(l) <= 100:
                     continue
                 filtered.append(l)
                 
-            if len(filtered) >= 3:
+            if len(filtered) >= 2:
                 brand = filtered[0]
-                # 가격 정보(원 혹은 콤마가 포함된 문자열) 찾기
                 price_idx = next((i for i, l in enumerate(filtered) if '원' in l or ',' in l), None)
                 
                 if price_idx is not None:
                     price = filtered[price_idx]
-                    # 브랜드와 가격 사이의 텍스트들을 조합하여 상품명 완성
-                    title_candidates = filtered[1:price_idx]
-                    title = " ".join(title_candidates) if title_candidates else filtered[1]
+                    title_candidates = [l for l in filtered[1:price_idx] if l != brand and len(l) > 1]
+                    title = title_candidates[0] if title_candidates else filtered[1]
                 else:
                     price = "가격 정보 없음"
                     title = filtered[1]
                 
-                if title and title not in seen_titles and "원" not in title:
+                if title and title not in seen_titles and title != brand and "원" not in title:
                     seen_titles.add(title)
                     products.append({
                         "Rank": len(products) + 1,
