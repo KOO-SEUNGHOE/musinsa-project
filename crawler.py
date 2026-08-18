@@ -26,43 +26,43 @@ try:
     driver.get("https://www.musinsa.com/main/musinsa/ranking?goodsKinds=NEW")
     time.sleep(5)
 
-    # 페이지 전체 로딩 및 렌더링을 위해 스크롤을 여러 번 내립니다.
-    driver.execute_script("window.scrollTo(0, 1500);")
-    time.sleep(3)
+    # 100위까지의 데이터를 모두 로드하기 위해 스크롤을 여러 번 내립니다.
+    for i in range(3):
+        driver.execute_script(f"window.scrollTo(0, {(i+1) * 1500});")
+        time.sleep(2)
 
-    # 상품 카드 영역을 정확히 지정 (상품 이미지나 링크가 포함된 개별 카드 박스)
-    # 무신사 랭킹 리스트의 상품 카드들을 감싸는 태그들을 탐색합니다.
-    product_cards = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sc-1v37d32-0, div[class*='goodsItem'], a[href*='/products/']")))
+    # 상품 카드 전체를 감싸는 상위 요소를 정확하게 타겟팅합니다.
+    # 무신사 랭킹의 각 상품 아이템 박스들을 모두 찾습니다.
+    items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sc-1v37d32-0, li[class*='listItem'], a[href*='/products/']")))
     
     products = []
     seen_titles = set()
     
-    for card in product_cards:
+    for item in items:
         try:
-            # 만약 a 태그를 직접 잡았다면 부모 카드 영역으로 이동
-            if card.tag_name == 'a':
-                item = card.find_element(By.XPATH, "./..")
+            # a 태그인 경우 부모 박스로 확장하여 전체 텍스트 확보
+            if item.tag_name == 'a':
+                card = item.find_element(By.XPATH, "./..")
             else:
-                item = card
+                card = item
 
-            text = item.text.strip()
+            text = card.text.strip()
             if not text:
                 continue
                 
             lines = [line.strip() for line in text.split('\n') if line.strip()]
             
-            filtered_lines = []
-            for line in lines:
-                if line.isdigit() and int(line) <= 100:
-                    continue
-                if line in ["급상승", "단독", "품절임박"] or "판매" in line or "%" in line:
-                    continue
-                filtered_lines.append(line)
+            # 텍스트 줄 중에서 가격('원' 또는 ',')과 상품명, 브랜드를 유추합니다.
+            # '급상승'이나 순위 숫자가 포함되어 있더라도 가격과 브랜드 배치를 정확히 찾습니다.
+            valid_lines = [l for l in lines if l not in ["급상승", "단독", "품절임박"] and not (l.isdigit() and int(l) <= 100)]
             
-            if len(filtered_lines) >= 2:
-                brand = filtered_lines[0]
-                price = next((line for line in filtered_lines if '원' in line or ',' in line), "가격 정보 없음")
-                title = next((line for line in filtered_lines if line != brand and line != price and len(line) > 1), "상품명 없음")
+            if len(valid_lines) >= 2:
+                brand = valid_lines[0]
+                price = next((l for l in valid_lines if '원' in l or ',' in l), "가격 정보 없음")
+                
+                # 브랜드와 가격이 아닌 가장 적절한 긴 텍스트를 상품명으로 지정
+                title_candidates = [l for l in valid_lines if l != brand and l != price and len(l) > 1 and "판매" not in l and "%" not in l]
+                title = title_candidates[0] if title_candidates else "상품명 없음"
                 
                 if title not in seen_titles and title != "상품명 없음" and "원" not in title:
                     seen_titles.add(title)
