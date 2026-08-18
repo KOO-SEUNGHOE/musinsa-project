@@ -8,7 +8,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 options = Options()
-# GitHub Actions 서버 환경 최적화 옵션
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
@@ -23,30 +22,38 @@ driver = webdriver.Chrome(options=options)
 wait = WebDriverWait(driver, 15)
 
 try:
-    print("무신사 랭킹 페이지 직접 접속 중 (Headless 모드)...")
+    print("무신사 랭킹 페이지 접속 중...")
     driver.get("https://www.musinsa.com/main/musinsa/ranking?goodsKinds=NEW")
     time.sleep(5)
 
-    driver.execute_script("window.scrollTo(0, 2000);")
+    # 페이지 전체 로딩 및 렌더링을 위해 스크롤을 여러 번 내립니다.
+    driver.execute_script("window.scrollTo(0, 1500);")
     time.sleep(3)
 
-    product_links = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a[href*='/products/']")))
-    items = [link.find_element(By.XPATH, "./..") for link in product_links]
+    # 상품 카드 영역을 정확히 지정 (상품 이미지나 링크가 포함된 개별 카드 박스)
+    # 무신사 랭킹 리스트의 상품 카드들을 감싸는 태그들을 탐색합니다.
+    product_cards = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sc-1v37d32-0, div[class*='goodsItem'], a[href*='/products/']")))
     
     products = []
     seen_titles = set()
     
-    for item in items:
+    for card in product_cards:
         try:
+            # 만약 a 태그를 직접 잡았다면 부모 카드 영역으로 이동
+            if card.tag_name == 'a':
+                item = card.find_element(By.XPATH, "./..")
+            else:
+                item = card
+
             text = item.text.strip()
             if not text:
                 continue
+                
             lines = [line.strip() for line in text.split('\n') if line.strip()]
             
-            # 순위 숫자, 뱃지, 마케팅 문구 등 불필요한 텍스트 필터링
             filtered_lines = []
             for line in lines:
-                if line.isdigit() and int(line) <= 100:  # 순위 숫자 제외
+                if line.isdigit() and int(line) <= 100:
                     continue
                 if line in ["급상승", "단독", "품절임박"] or "판매" in line or "%" in line:
                     continue
