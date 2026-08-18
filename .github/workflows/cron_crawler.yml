@@ -24,7 +24,7 @@ jobs:
           pip install selenium pandas
 
       - name: Run crawler script
-        run: python auto_crawler.py  # 위에서 만든 크롤링 파일명
+        run: python crawler.py  # 위에서 만든 크롤링 파일명
 
       - name: Commit and push changes if data updated
         run: |
