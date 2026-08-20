@@ -3,8 +3,6 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
 options = Options()
 options.add_argument("--headless=new")
@@ -18,96 +16,76 @@ options.add_experimental_option('useAutomationExtension', False)
 options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 driver = webdriver.Chrome(options=options)
-wait = WebDriverWait(driver, 15)
 
 try:
     print("무신사 전체 실시간 랭킹 페이지 접속 중...")
-    driver.get("https://www.musinsa.com/main/musinsa/ranking?gf=A&storeCode=musinsa&sectionId=199&contentsId=&categoryCode=000&ageBand=AGE_BAND_ALL&subPan=product")
-    time.sleep(5)
+    url = "https://www.musinsa.com/main/musinsa/ranking?gf=A&storeCode=musinsa&sectionId=199&contentsId=&categoryCode=000&ageBand=AGE_BAND_ALL&subPan=product"
+    driver.get(url)
+    time.sleep(4)
 
-    # 100개 상품이 모두 로드되도록 스크롤을 충분히 내립니다.
-    for _ in range(10):
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)
+    # 100개 상품이 DOM에 렌더링되도록 구간별로 천천히 스크롤
+    for i in range(12):
+        driver.execute_script(f"window.scrollTo(0, {i * 700});")
+        time.sleep(1)
 
-    # 상품 상세로 가는 고유 링크들을 모두 수집
-    product_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/products/']")
+    # 상품 링크 수집
+    links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/products/']")
     
-    seen_urls = set()
-    unique_cards = []
-    
-    # 중복 링크를 제거하고 각 상품의 개별 카드 영역을 안전하게 추출
-    for link in product_links:
-        href = link.get_attribute("href")
-        if href and href not in seen_urls:
-            seen_urls.add(href)
-            try:
-                # 합집합 연산자(|)를 쓰지 않고 안전하게 부모 요소를 탐색합니다.
-                card = link.find_element(By.XPATH, "./parent::*")
-                # 만약 부모가 너무 좁거나 넓으면 한 단계 위를 타겟팅
-                try:
-                    card = card.find_element(By.XPATH, "./parent::*")
-                except:
-                    pass
-                unique_cards.append(card)
-            except:
-                continue
-
     products = []
-    seen_titles = set()
-    current_rank = 1
-    
-    for card in unique_cards:
+    seen_urls = set()
+
+    for link in links:
+        href = link.get_attribute("href")
+        if not href or href in seen_urls:
+            continue
+        
         try:
-            text = card.text.strip()
-            if not text:
+            # 부모 요소 추출
+            card = link.find_element(By.XPATH, "./ancestor::li | ./ancestor::div[contains(@class, 'item')] | ./..")
+            raw_lines = [t.strip() for t in card.text.split('\n') if t.strip()]
+            
+            # Pure 숫자(ID, 순위 등) 및 마케팅 텍스트 완전 제거
+            clean_lines = []
+            for line in raw_lines:
+                if line.isdigit():  # '1014', '1' 등 순수 숫자는 무조건 제어
+                    continue
+                if any(kw in line for kw in ["급상승", "단독", "품절임박", "쿠폰", "명이 보는 중", "도착보장", "판매"]):
+                    continue
+                clean_lines.append(line)
+
+            # 가격('원' 포함)을 기준으로 구조 분리
+            price = next((l for l in clean_lines if '원' in l), None)
+            if not price:
                 continue
-                
-            lines = [l.strip() for l in text.split('\n') if l.strip()]
+
+            # 가격이 아닌 나머지 텍스트 추출 (브랜드 / 상품명)
+            text_tokens = [l for l in clean_lines if '원' not in l]
             
-            # 불필요한 메타 텍스트 필터링
-            filtered = []
-            for l in lines:
-                if l in ["급상승", "단독", "품절임박", "쿠폰"] or "%" in l or "명이 보는 중" in l or "도착보장" in l or "판매" in l:
-                    continue
-                if l.isdigit() and 1 <= int(l) <= 100:
-                    continue
-                filtered.append(l)
-                
-            if len(filtered) >= 2:
-                brand = filtered[0]
-                price_idx = next((i for i, l in enumerate(filtered) if '원' in l or ',' in l), None)
-                
-                if price_idx is not None:
-                    price = filtered[price_idx]
-                    title_candidates = [l for l in filtered[1:price_idx] if l != brand and len(l) > 1]
-                    title = title_candidates[0] if title_candidates else filtered[1]
-                else:
-                    price = "가격 정보 없음"
-                    title = filtered[1]
-                
-                # 유효한 상품명이고 중복되지 않은 경우에만 추가
-                if title and title != brand and "원" not in title and title not in seen_titles:
-                    seen_titles.add(title)
-                    products.append({
-                        "Rank": current_rank,
-                        "Brand": brand,
-                        "Title": title,
-                        "Price": price
-                    })
-                    current_rank += 1
-            
+            if len(text_tokens) >= 2:
+                brand = text_tokens[0]
+                title = " ".join(text_tokens[1:])
+            elif len(text_tokens) == 1:
+                brand = "무신사"
+                title = text_tokens[0]
+            else:
+                continue
+
+            seen_urls.add(href)
+            products.append({
+                "Rank": len(products) + 1,
+                "Brand": brand,
+                "Title": title,
+                "Price": price
+            })
+
             if len(products) >= 100:
                 break
         except Exception:
             continue
 
     df = pd.DataFrame(products)
-    print(f"수집 성공! 총 {len(df)}개 상품.")
-    
-    if len(df) > 0:
-        df.to_csv("musinsa_new_ranking_top100.csv", index=False, encoding="utf-8-sig")
-        print("CSV 파일 저장 완료.")
+    print(f"수집 완료: 총 {len(df)}개")
+    df.to_csv("musinsa_new_ranking_top100.csv", index=False, encoding="utf-8-sig")
 
 finally:
     driver.quit()
