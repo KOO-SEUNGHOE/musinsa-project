@@ -1,4 +1,5 @@
 import time
+import re
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -21,14 +22,13 @@ try:
     print("무신사 전체 실시간 랭킹 페이지 접속 중...")
     url = "https://www.musinsa.com/main/musinsa/ranking?gf=A&storeCode=musinsa&sectionId=199&contentsId=&categoryCode=000&ageBand=AGE_BAND_ALL&subPan=product"
     driver.get(url)
-    time.sleep(4)
+    time.sleep(5)
 
-    # 100개 상품이 DOM에 렌더링되도록 구간별로 천천히 스크롤
-    for i in range(12):
-        driver.execute_script(f"window.scrollTo(0, {i * 700});")
-        time.sleep(1)
+    # 100개 상품이 완전히 렌더링되도록 촘촘하게 스크롤 실행
+    for i in range(15):
+        driver.execute_script(f"window.scrollTo(0, {i * 600});")
+        time.sleep(0.8)
 
-    # 상품 링크 수집
     links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/products/']")
     
     products = []
@@ -38,54 +38,66 @@ try:
         href = link.get_attribute("href")
         if not href or href in seen_urls:
             continue
-        
+
         try:
-            # 부모 요소 추출
-            card = link.find_element(By.XPATH, "./ancestor::li | ./ancestor::div[contains(@class, 'item')] | ./..")
-            raw_lines = [t.strip() for t in card.text.split('\n') if t.strip()]
-            
-            # Pure 숫자(ID, 순위 등) 및 마케팅 텍스트 완전 제거
+            card = link.find_element(By.XPATH, "./ancestor::li | ./ancestor::div[contains(@class, 'goods')] | ./ancestor::div[contains(@class, 'item')] | ./..")
+            text = card.text.strip()
+            if not text:
+                continue
+
+            lines = [l.strip() for l in text.split('\n') if l.strip()]
+
+            # 1. 가격 추출 ('원'과 숫자가 포함된 행)
+            prices = [l for l in lines if '원' in l and any(c.isdigit() for c in l)]
+            if not prices:
+                continue
+            price = prices[-1]  # 최종 할인가 선택
+
+            # 2. 노이즈 및 할인율(%) 필터링
+            noise_keywords = ["급상승", "단독", "품절임박", "쿠폰", "보는 중", "도착보장", "구매", "적립", "무료배송", "할인"]
             clean_lines = []
-            for line in raw_lines:
-                if line.isdigit():  # '1014', '1' 등 순수 숫자는 무조건 제어
+            for line in lines:
+                if line.isdigit():  # 순위 숫자/ID 제거
                     continue
-                if any(kw in line for kw in ["급상승", "단독", "품절임박", "쿠폰", "명이 보는 중", "도착보장", "판매"]):
+                if re.match(r'^\d+%$', line):  # '16%', '30%' 등 할인율 제거
+                    continue
+                if any(kw in line for kw in noise_keywords):
+                    continue
+                if '원' in line:
                     continue
                 clean_lines.append(line)
 
-            # 가격('원' 포함)을 기준으로 구조 분리
-            price = next((l for l in clean_lines if '원' in l), None)
-            if not price:
-                continue
-
-            # 가격이 아닌 나머지 텍스트 추출 (브랜드 / 상품명)
-            text_tokens = [l for l in clean_lines if '원' not in l]
-            
-            if len(text_tokens) >= 2:
-                brand = text_tokens[0]
-                title = " ".join(text_tokens[1:])
-            elif len(text_tokens) == 1:
+            # 3. 브랜드 및 상품명 정밀 분리
+            if len(clean_lines) >= 2:
+                brand = clean_lines[0]
+                title = " ".join(clean_lines[1:])
+            elif len(clean_lines) == 1:
                 brand = "무신사"
-                title = text_tokens[0]
+                title = clean_lines[0]
             else:
                 continue
 
-            seen_urls.add(href)
-            products.append({
-                "Rank": len(products) + 1,
-                "Brand": brand,
-                "Title": title,
-                "Price": price
-            })
+            # 상단 광고나 랭킹 외 상품 방지 (브랜드명과 상품명이 정상 분리된 경우만)
+            if brand and title and title != brand:
+                seen_urls.add(href)
+                products.append({
+                    "Rank": len(products) + 1,
+                    "Brand": brand,
+                    "Title": title,
+                    "Price": price
+                })
 
             if len(products) >= 100:
                 break
+
         except Exception:
             continue
 
     df = pd.DataFrame(products)
-    print(f"수집 완료: 총 {len(df)}개")
-    df.to_csv("musinsa_new_ranking_top100.csv", index=False, encoding="utf-8-sig")
+    print(f"수집 성공! 총 {len(df)}개 상품.")
+    if len(df) > 0:
+        df.to_csv("musinsa_new_ranking_top100.csv", index=False, encoding="utf-8-sig")
+        print("CSV 파일 저장 완료.")
 
 finally:
     driver.quit()
