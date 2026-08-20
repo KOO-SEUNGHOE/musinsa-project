@@ -26,32 +26,35 @@ try:
     time.sleep(5)
 
     # 100개 상품이 모두 로드되도록 스크롤을 충분히 내립니다.
-    last_height = driver.execute_script("return document.body.scrollHeight")
     for _ in range(10):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(2)
-        new_height = driver.execute_script("return document.body.scrollHeight")
-        if new_height == last_height:
-            break
-        last_height = new_height
 
-    # 모든 상품 링크를 가져온 뒤, 고유 URL 기준으로 중복 제거 (이미지 링크 + 텍스트 링크 중복 방지)
+    # 상품 상세로 가는 고유 링크들을 모두 수집
     product_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/products/']")
     
     seen_urls = set()
     unique_cards = []
     
+    # 중복 링크를 제거하고 각 상품의 개별 카드 영역을 안전하게 추출
     for link in product_links:
         href = link.get_attribute("href")
         if href and href not in seen_urls:
             seen_urls.add(href)
             try:
-                card = link.find_element(By.XPATH, "./ancestor::li | ./ancestor::div[contains(@class, 'item')] | ./..")
+                # 합집합 연산자(|)를 쓰지 않고 안전하게 부모 요소를 탐색합니다.
+                card = link.find_element(By.XPATH, "./parent::*")
+                # 만약 부모가 너무 좁거나 넓으면 한 단계 위를 타겟팅
+                try:
+                    card = card.find_element(By.XPATH, "./parent::*")
+                except:
+                    pass
                 unique_cards.append(card)
             except:
                 continue
 
     products = []
+    seen_titles = set()
     current_rank = 1
     
     for card in unique_cards:
@@ -83,7 +86,9 @@ try:
                     price = "가격 정보 없음"
                     title = filtered[1]
                 
-                if title and title != brand and "원" not in title:
+                # 유효한 상품명이고 중복되지 않은 경우에만 추가
+                if title and title != brand and "원" not in title and title not in seen_titles:
+                    seen_titles.add(title)
                     products.append({
                         "Rank": current_rank,
                         "Brand": brand,
