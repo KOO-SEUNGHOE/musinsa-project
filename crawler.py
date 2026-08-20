@@ -24,15 +24,18 @@ try:
     driver.get(url)
     time.sleep(5)
 
-    # 100개 상품이 완전히 렌더링되도록 촘촘하게 스크롤 실행
+    # 100개 상품이 완전히 렌더링되도록 스크롤 실행
     for i in range(15):
-        driver.execute_script(f"window.scrollTo(0, {i * 600});")
-        time.sleep(0.8)
+        driver.execute_script(f"window.scrollTo(0, {i * 800});")
+        time.sleep(1)
 
     links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/products/']")
     
     products = []
     seen_urls = set()
+
+    # 노이즈 문구 필터링 키워드 (급상승, 판매, 구매 등 완전 제거)
+    ignore_keywords = ["급상승", "단독", "품절임박", "쿠폰", "도착보장", "구매", "판매", "보는 중", "적립", "무료배송", "후기"]
 
     for link in links:
         href = link.get_attribute("href")
@@ -47,38 +50,42 @@ try:
 
             lines = [l.strip() for l in text.split('\n') if l.strip()]
 
-            # 1. 가격 추출 ('원'과 숫자가 포함된 행)
-            prices = [l for l in lines if '원' in l and any(c.isdigit() for c in l)]
-            if not prices:
-                continue
-            price = prices[-1]  # 최종 할인가 선택
-
-            # 2. 노이즈 및 할인율(%) 필터링
-            noise_keywords = ["급상승", "단독", "품절임박", "쿠폰", "보는 중", "도착보장", "구매", "적립", "무료배송", "할인"]
+            # 1. 단순 숫자(순위), 배지 문구, 단독 할인율(%) 필터링
             clean_lines = []
             for line in lines:
-                if line.isdigit():  # 순위 숫자/ID 제거
+                if line.isdigit():  # 순위 숫자 (1, 2, 3...) 제거
                     continue
-                if re.match(r'^\d+%$', line):  # '16%', '30%' 등 할인율 제거
+                if re.match(r'^\d+%$', line):  # '28%' 등 단독 할인율 제거
                     continue
-                if any(kw in line for kw in noise_keywords):
-                    continue
-                if '원' in line:
+                if any(kw in line for kw in ignore_keywords):  # '급상승', '판매 2.4천개' 등 제거
                     continue
                 clean_lines.append(line)
 
-            # 3. 브랜드 및 상품명 정밀 분리
-            if len(clean_lines) >= 2:
-                brand = clean_lines[0]
-                title = " ".join(clean_lines[1:])
-            elif len(clean_lines) == 1:
-                brand = "무신사"
-                title = clean_lines[0]
+            # 2. 가격('원' 문맥) 찾기 및 추출
+            price = None
+            price_line_idx = -1
+            for idx, line in enumerate(clean_lines):
+                match = re.search(r'([\d,]+원)', line)
+                if match:
+                    price = match.group(1)  # '70,560원' 형태만 정밀 추출
+                    price_line_idx = idx
+                    break
+
+            if not price or price_line_idx == -1:
+                continue
+
+            # 3. 가격 표시 이전 줄들을 브랜드와 상품명으로 분리
+            info_lines = clean_lines[:price_line_idx]
+            if len(info_lines) >= 2:
+                brand = info_lines[0]
+                title = " ".join(info_lines[1:])
+            elif len(info_lines) == 1:
+                brand = info_lines[0]
+                title = info_lines[0]
             else:
                 continue
 
-            # 상단 광고나 랭킹 외 상품 방지 (브랜드명과 상품명이 정상 분리된 경우만)
-            if brand and title and title != brand:
+            if brand and title:
                 seen_urls.add(href)
                 products.append({
                     "Rank": len(products) + 1,
