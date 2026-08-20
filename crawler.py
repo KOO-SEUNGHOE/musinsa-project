@@ -26,28 +26,43 @@ try:
     time.sleep(5)
 
     # 100개 상품이 모두 로드되도록 스크롤을 충분히 내립니다.
-    for _ in range(8):
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    for _ in range(10):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(2)
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+            break
+        last_height = new_height
 
-    # 상품 카드 내부에 상품 상세 링크가 포함된 모든 요소를 직접 수집합니다.
-    # 부모 요소를 찾지 않고 링크 자체를 카드 단위로 활용하여 에러를 원천 차단합니다.
-    product_links = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a[href*='/products/']")))
+    # 모든 상품 링크를 가져온 뒤, 고유 URL 기준으로 중복 제거 (이미지 링크 + 텍스트 링크 중복 방지)
+    product_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/products/']")
     
-    products = []
-    seen_titles = set()
+    seen_urls = set()
+    unique_cards = []
     
     for link in product_links:
+        href = link.get_attribute("href")
+        if href and href not in seen_urls:
+            seen_urls.add(href)
+            try:
+                card = link.find_element(By.XPATH, "./ancestor::li | ./ancestor::div[contains(@class, 'item')] | ./..")
+                unique_cards.append(card)
+            except:
+                continue
+
+    products = []
+    current_rank = 1
+    
+    for card in unique_cards:
         try:
-            # 링크가 포함된 가장 가까운 상위 박스 영역의 텍스트를 추출
-            card = link.find_element(By.XPATH, "./ancestor::li | ./ancestor::div[contains(@class, 'item')] | ./..")
             text = card.text.strip()
             if not text:
                 continue
                 
             lines = [l.strip() for l in text.split('\n') if l.strip()]
             
-            # 불필요한 메타 텍스트 및 랭킹 숫자 필터링
+            # 불필요한 메타 텍스트 필터링
             filtered = []
             for l in lines:
                 if l in ["급상승", "단독", "품절임박", "쿠폰"] or "%" in l or "명이 보는 중" in l or "도착보장" in l or "판매" in l:
@@ -68,14 +83,14 @@ try:
                     price = "가격 정보 없음"
                     title = filtered[1]
                 
-                if title and title not in seen_titles and title != brand and "원" not in title:
-                    seen_titles.add(title)
+                if title and title != brand and "원" not in title:
                     products.append({
-                        "Rank": len(products) + 1,
+                        "Rank": current_rank,
                         "Brand": brand,
                         "Title": title,
                         "Price": price
                     })
+                    current_rank += 1
             
             if len(products) >= 100:
                 break
